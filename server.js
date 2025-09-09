@@ -118,7 +118,7 @@ app.get('/product/:id', ah(async (req, res) => {
 
 // ✅ 계좌송금 방식 체크아웃 (옵션 유효성 검사)
 // ✅ 계좌송금 체크아웃 (옵션/재고 검증 + user_id 저장)
-app.post('/checkout', ensureAuth, ah(async (req, res) => {
+app.post('/checkout', ah(async (req, res) => {
   // body에서 꺼낼 때 변수명 충돌/TDZ 방지 위해 "Raw" 이름으로 받기
   const { product_id, quantity, variant_id } = req.body || {};
   const buyerNameRaw  = (req.body?.buyer_name  ?? '').trim();
@@ -293,15 +293,7 @@ app.post('/logout', (req, res) => {
 });
 
 // ▼ 마이페이지
-
-// 로그인 강제 + 리다이렉트 복귀 지원
-const ensureAuth = (req, res, next) => {
-  if (req.session?.user) return next();
-  // 로그인 후 돌아올 위치 저장
-  req.session.nextUrl = req.originalUrl || '/';
-  return res.redirect('/login');
-};
-
+const ensureAuth = (req,res,next)=> req.session?.user ? next() : res.redirect('/login');
 app.get('/account', ensureAuth, ah(async (req, res) => {
   const user = req.session.user;
   const orders = await db.all(`
@@ -327,8 +319,21 @@ app.use((req, res, next) => {
 });
 
 
+// 중복 기동 방지(한 프로세스 내 1회만 리슨)
+if (!globalThis.__serverStarted) {
+  globalThis.__serverStarted = true;
 
-// 서버 시작
-app.listen(PORT, () => {
-  console.log('Kidswear shop running on http://localhost:'+PORT);
-});
+  app.listen(PORT, () => {
+    console.log(`Kidswear shop running on http://localhost:${PORT}`);
+  });
+
+  // DB 초기화는 비치명적으로 백그라운드 수행
+  (async () => {
+    try {
+      await db.init();
+      console.log('DB init OK');
+    } catch (e) {
+      console.error('[db.init] failed:', e?.message || e);
+    }
+  })();
+}
