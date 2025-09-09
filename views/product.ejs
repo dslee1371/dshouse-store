@@ -1,18 +1,14 @@
 <% const hero = (gallery && gallery.length ? gallery[0] : (product.image_path || '/placeholder.png')); %>
-
 <% if (typeof user !== 'undefined' && user) { %>
   <div class="auth-banner">
     <span>😊</span>
     <span><strong><%= user.name || user.email %></strong> 님 로그인 중</span>
     <div class="right">
       <a class="btn small ghost" href="/account">마이페이지</a>
-      <form style="display:inline" method="POST" action="/logout">
-        <button class="btn small ghost" type="submit">로그아웃</button>
-      </form>
+      <form style="display:inline" method="POST" action="/logout"><button class="btn small ghost" type="submit">로그아웃</button></form>
     </div>
   </div>
 <% } %>
-
 <div class="product-grid">
   <div class="media">
     <div class="main-image can-zoom-in" id="img-wrap">
@@ -36,59 +32,38 @@
     </div>
     <p style="font-size:14px;color:var(--muted);white-space:pre-wrap"><%= product.description || '' %></p>
 
-    <% if (typeof user !== 'undefined' && user) { %>
-      <!-- ✅ 로그인 상태: 주문 폼 표시 -->
-      <form class="form" method="POST" action="/checkout" style="margin-top:12px">
-        <input type="hidden" name="product_id" value="<%= product.id %>" />
-        <input type="hidden" name="variant_id" id="variantId" />
+    <form class="form" method="POST" action="/checkout" style="margin-top:12px">
+      <input type="hidden" name="product_id" value="<%= product.id %>" />
+      <input type="hidden" name="variant_id" id="variantId" />
 
-        <% if (variants && variants.length) { %>
-          <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px">
-            <label>사이즈
-              <select id="selSize"></select>
-            </label>
-            <label>색상
-              <select id="selColor"></select>
-            </label>
-          </div>
-        <% } %>
-
-        <label>수량
-          <input id="qty" type="number" name="quantity" value="1" min="1" required />
-        </label>
-
-        <label>이름
-          <input type="text" name="buyer_name" placeholder="구매자 성함"
-                 value="<%= (user && user.name) || '' %>" autocomplete="name" />
-          <small class="muted">회원 정보로 자동 입력되었습니다. 변경 가능</small>
-        </label>
-
-        <label>이메일
-          <input type="email" name="buyer_email" placeholder="연락 받을 이메일"
-                 value="<%= (user && user.email) || '' %>" readonly autocomplete="email" required />
-          <small class="muted">가입 이메일로 주문 알림을 보내드려요</small>
-        </label>
-
-        <button id="buyBtn" class="btn brand" type="submit">주문하기(계좌송금)</button>
-      </form>
-    <% } else { %>
-      <!-- 🚫 비로그인: 주문 불가 안내 + 로그인/회원가입 유도 -->
-      <div class="notice-card" style="margin-top:16px">
-        <div class="title">로그인 후 주문 가능합니다</div>
-        <div style="margin:6px 0 12px;color:var(--muted)">아동복샵은 회원 보호를 위해 주문은 회원만 가능해요.</div>
-        <div style="display:flex;gap:8px;flex-wrap:wrap">
-          <a class="btn brand" href="/login?next=/product/<%= product.id %>">로그인</a>
-          <a class="btn ghost" href="/signup?next=/product/<%= product.id %>">회원가입</a>
+      <% if (variants && variants.length) { %>
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px">
+          <label>사이즈
+            <select id="selSize"></select>
+          </label>
+          <label>색상
+            <select id="selColor"></select>
+          </label>
         </div>
-      </div>
-    <% } %>
+      <% } %>
+
+      <label>수량
+        <input id="qty" type="number" name="quantity" value="1" min="1" required />
+      </label>
+      <label>이름
+        <input type="text" name="buyer_name" placeholder="구매자 성함" value="<%= (typeof user !== 'undefined' && user && user.name) || '' %>" autocomplete="name" />
+        <% if (typeof user !== 'undefined' && user) { %><small class="muted">회원 정보로 자동 입력되었습니다. 변경 가능</small><% } %>
+      </label>
+      <label>이메일
+        <input type="email" name="buyer_email" placeholder="연락 받을 이메일" value="<%= (typeof user !== 'undefined' && user && user.email) || '' %>" <%= (typeof user !== 'undefined' && user) ? 'readonly' : '' %> autocomplete="email" required />
+        <% if (typeof user !== 'undefined' && user) { %><small class="muted">가입 이메일로 주문 알림을 보내드려요</small><% } %>
+      </label>
+      <button id="buyBtn" class="btn brand" type="submit">주문하기(계좌송금)</button>
+    </form>
 
     <div class="notice-card">
       <div class="title">계좌송금 안내</div>
-      <div>
-        계좌번호: <span class="bank">농협 241097-56-078780 장은애</span>
-        <button class="btn ghost" id="copyBtn" type="button">복사</button>
-      </div>
+      <div>계좌번호: <span class="bank">농협 241097-56-078780 장은애</span> <button class="btn ghost" id="copyBtn" type="button">복사</button></div>
       <div style="margin-top:6px;color:var(--muted)">입금 확인 후 발송 일정을 안내드립니다. 평균 1주 소요.</div>
     </div>
   </div>
@@ -111,7 +86,7 @@
 
     // Zoom/Pan 상태
     let scale = 1, minScale = 1, maxScale = 4;
-    let x = 0, y = 0;
+    let x = 0, y = 0; // translate px
     let dragging = false, startX = 0, startY = 0, originX = 0, originY = 0;
     let pinching = false, startDist = 0, startScale = 1;
 
@@ -135,24 +110,25 @@
       container.classList.toggle('grabbable', scale > 1);
     }
 
-    // 더블클릭 줌
-    container.addEventListener('dblclick', () => {
+    // 더블클릭으로 토글 줌
+    container.addEventListener('dblclick', (e) => {
       if (scale === 1) { scale = 2; } else { resetZoom(); return; }
       clampPan(); apply();
     });
 
-    // 휠 줌
+    // 휠 줌(중심 기준)
     container.addEventListener('wheel', (e) => {
       e.preventDefault();
       const k = e.deltaY > 0 ? 0.9 : 1.1;
-      scale = Math.min(maxScale, Math.max(minScale, scale * k));
+      const newScale = Math.min(maxScale, Math.max(minScale, scale * k));
+      scale = newScale;
       if (scale === 1) { x = 0; y = 0; }
       clampPan(); apply();
     }, { passive: false });
 
     // 드래그 팬
     container.addEventListener('mousedown', (e) => {
-      if (scale === 1) return;
+      if (scale === 1) return; // 확대 시에만
       dragging = true; container.classList.add('grabbing');
       startX = e.clientX; startY = e.clientY; originX = x; originY = y;
     });
@@ -164,10 +140,10 @@
     });
     window.addEventListener('mouseup', () => { dragging = false; container.classList.remove('grabbing'); });
 
-    // 터치: 팬 + 핀치
+    // 터치: 팬 + 핀치 줌
     container.addEventListener('touchstart', (e) => {
       if (e.touches.length === 1) {
-        if (scale === 1) return;
+        if (scale === 1) return; // 확대 상태에서만 팬
         dragging = true; startX = e.touches[0].clientX; startY = e.touches[0].clientY; originX = x; originY = y;
       } else if (e.touches.length === 2) {
         pinching = true; dragging = false;
@@ -193,33 +169,28 @@
     }, { passive: false });
     function dist(a,b){ const dx=a.clientX-b.clientX, dy=a.clientY-b.clientY; return Math.hypot(dx,dy); }
 
-    // 계좌번호 복사
+    // 복사 버튼
     const copyBtn = document.getElementById('copyBtn');
     copyBtn?.addEventListener('click', async () => {
-      try {
-        await navigator.clipboard.writeText('농협 241097-56-078780 장은애');
-        copyBtn.textContent = '복사됨';
-        setTimeout(()=> copyBtn.textContent='복사', 1500);
-      } catch(e){
-        alert('복사 실패');
-      }
+      try { await navigator.clipboard.writeText('농협 241097-56-078780 장은애'); copyBtn.textContent = '복사됨'; setTimeout(()=> copyBtn.textContent='복사', 1500); } catch(e){ alert('복사 실패'); }
     });
 
-    // ✅ 옵션/재고 로직 (폼이 없을 수도 있으므로 안전 가드 포함)
+    // ✅ 옵션 드롭다운 로직
     const variants = <%- JSON.stringify(variants || []) %>;
-    const selSize   = document.getElementById('selSize');
-    const selColor  = document.getElementById('selColor');
+    const selSize = document.getElementById('selSize');
+    const selColor = document.getElementById('selColor');
     const variantId = document.getElementById('variantId');
-    const qty       = document.getElementById('qty');
-    const buyBtn    = document.getElementById('buyBtn');
-    const pill      = document.getElementById('stockPill');
+    const qty = document.getElementById('qty');
+    const buyBtn = document.getElementById('buyBtn');
+    const pill = document.getElementById('stockPill');
 
     function unique(arr){ return [...new Set(arr.filter(Boolean))]; }
-    const sizes  = unique(variants.map(v=>v.size));
+    function key(s,c){ return `${s||''}|${c||''}`; }
+
+    const sizes = unique(variants.map(v=>v.size));
     const colors = unique(variants.map(v=>v.color));
 
     function fillSelect(sel, items){
-      if (!sel) return;
       sel.innerHTML = '';
       const opt0 = document.createElement('option');
       opt0.value = ''; opt0.textContent = '선택하세요'; sel.appendChild(opt0);
@@ -232,49 +203,42 @@
     }
 
     function updateStockView(){
-      const setQtyMax = (v)=> { if (qty) qty.max = Math.max(1, v); };
-      const setBuyDisabled = (flag)=> { if (buyBtn) buyBtn.disabled = !!flag; };
-
+      const v = currentVariant();
       if (!variants.length){
         const available = <%= (product.stock||0) %>;
         pill.className = 'stock-pill ' + (available>0?'good':'bad');
         pill.textContent = available>0 ? `재고 ${available}개` : '품절';
-        setQtyMax(available);
-        setBuyDisabled(available<=0);
+        qty.max = Math.max(1, available);
+        buyBtn.disabled = available<=0;
         return;
       }
-      const v = currentVariant();
       if (!v){
-        pill.className = 'stock-pill';
-        pill.textContent = '옵션을 선택하세요';
-        setQtyMax(1);
-        setBuyDisabled(true);
-        if (variantId) variantId.value = '';
+        pill.className = 'stock-pill'; pill.textContent = '옵션을 선택하세요';
+        qty.max = 1; buyBtn.disabled = true; variantId.value = '';
       } else {
         pill.className = 'stock-pill ' + (v.stock>0?'good':'bad');
         pill.textContent = v.stock>0 ? `재고 ${v.stock}개` : '품절';
-        setQtyMax(v.stock||1);
-        setBuyDisabled((v.stock||0) <= 0);
-        if (variantId) variantId.value = v.id;
+        qty.max = Math.max(1, v.stock||1);
+        buyBtn.disabled = (v.stock||0) <= 0;
+        variantId.value = v.id;
       }
     }
 
     if (variants.length){
-      fillSelect(selSize, sizes);
-      fillSelect(selColor, colors);
-      selSize && selSize.addEventListener('change', updateStockView);
-      selColor && selColor.addEventListener('change', updateStockView);
+      fillSelect(selSize, sizes); fillSelect(selColor, colors);
+      selSize.addEventListener('change', updateStockView);
+      selColor.addEventListener('change', updateStockView);
     }
-    // 자동 선택(옵션 하나뿐이면)
+    // 자동 선택(옵션이 하나뿐이면)
     if (variants.length){
-      if (sizes.length === 1 && selSize) selSize.value = sizes[0];
-      if (colors.length === 1 && selColor) selColor.value = colors[0];
+      if (sizes.length === 1) selSize.value = sizes[0];
+      if (colors.length === 1) selColor.value = colors[0];
       updateStockView();
     } else {
       updateStockView();
     }
 
-    // 폼 제출 UX (폼이 있을 때만)
+    // 폼 제출 UX: 옵션 미선택 방지 + 중복 제출 방지
     const form = document.querySelector('form.form');
     form?.addEventListener('submit', (e) => {
       if (variants.length && !currentVariant()){
@@ -284,14 +248,12 @@
         selSize?.focus();
         return;
       }
-      if (buyBtn){
-        buyBtn.disabled = true;
-        buyBtn.dataset.prev = buyBtn.textContent;
-        buyBtn.textContent = '주문 처리 중...';
-      }
+      buyBtn.disabled = true;
+      buyBtn.dataset.prev = buyBtn.textContent;
+      buyBtn.textContent = '주문 처리 중...';
     });
 
-    // 초기 렌더
+    // 최초 상태 적용
     apply();
   })();
 </script>
