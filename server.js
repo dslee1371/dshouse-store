@@ -119,6 +119,13 @@ app.get('/product/:id', ah(async (req, res) => {
 // ✅ 계좌송금 방식 체크아웃 (옵션 유효성 검사)
 // ✅ 계좌송금 체크아웃 (옵션/재고 검증 + user_id 저장)
 app.post('/checkout', ah(async (req, res) => {
+  // 값 추가
+  const {
+  product_id, variant_id, quantity,
+  buyer_name, buyer_email,
+  // ✅ 배송정보
+  ship_name, ship_phone, ship_postcode, ship_addr1, ship_addr2, ship_memo
+} = req.body;
   // body에서 꺼낼 때 변수명 충돌/TDZ 방지 위해 "Raw" 이름으로 받기
   const { product_id, quantity, variant_id } = req.body || {};
   const buyerNameRaw  = (req.body?.buyer_name  ?? '').trim();
@@ -153,13 +160,22 @@ app.post('/checkout', ah(async (req, res) => {
   const buyerEmail = buyerEmailRaw || req.session.user?.email || '';
 
   const order = await db.run(
-    `INSERT INTO orders
-     (product_id, user_id, variant_id, option_size, option_color,
-      quantity, amount, buyer_name, buyer_email, status)
-     VALUES (?,?,?,?,?,?,?,?,?,?)`,
-    [product.id, uid, vid, option_size, option_color,
-     qty, amountKRW, buyerName, buyerEmail, 'pending']
+    `INSERT INTO orders (
+    product_id, quantity, amount,
+    buyer_name, buyer_email,
+    status, user_id, variant_id, option_size, option_color,
+    ship_name, ship_phone, ship_postcode, ship_addr1, ship_addr2, ship_memo
+  ) VALUES (?, ?, ?, ?, ?, 'pending', ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+    [product_id, quantity, amount,
+    buyer_name, buyer_email,
+    req.session.user.id, variantIdOrNull, optionSizeOrNull, optionColorOrNull,
+    ship_name, ship_phone, ship_postcode, ship_addr1, ship_addr2, ship_memo, 'pending']
   );
+
+  if (!ship_name || !ship_phone || !ship_postcode || !ship_addr1) {
+  return res.status(400).send('배송지 정보를 입력해 주세요.');
+}
+
 
   const optionText = option_size || option_color
     ? `${option_size || ''}${option_color ? ' / ' + option_color : ''}` : '';
