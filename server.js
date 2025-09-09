@@ -8,6 +8,8 @@ import cookieParser from 'cookie-parser';
 import db from './db.js';
 import ejs from 'ejs';
 import fs from 'fs';
+import { uploadBuffer, buildObjectName, urlToObjectName, deleteObject } from './gcs.js';
+
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -23,17 +25,17 @@ app.get('/healthz', (req,res) => res.status(200).send('ok')); // 선택
 
 
 // DB 초기화는 비치명적으로 백그라운드에서
-(async () => {
-  try {
-    await db.init();
-    console.log('DB init OK');
-  } catch (e) {
-    console.error('DB init failed (non-fatal):', e?.message || e);
-  }
-})();
+// (async () => {
+//   try {
+//     await db.init();
+//     console.log('DB init OK');
+//   } catch (e) {
+//     console.error('DB init failed (non-fatal):', e?.message || e);
+//   }
+// })();
 
 
-// 업로드 스토리지
+/* // 업로드 스토리지
 const uploadDir = path.join(__dirname, 'uploads');
 const storage = multer.diskStorage({
   destination: (req, file, cb) => cb(null, uploadDir),
@@ -43,7 +45,13 @@ const storage = multer.diskStorage({
     cb(null, `${Date.now()}_${base}${ext}`);
   }
 });
-const upload = multer({ storage });
+const upload = multer({ storage }); */
+
+// upload
+const upload = multer({
+  storage: multer.memoryStorage(),
+  limits: { fileSize: 10 * 1024 * 1024 } // 10MB
+});
 
 // 미들웨어
 app.use(express.urlencoded({ extended: true }));
@@ -57,8 +65,8 @@ app.use(session({
 }));
 
 // 정적 파일
-app.use(express.static(path.join(__dirname, 'public')));
-app.use('/uploads', express.static(uploadDir));
+// app.use(express.static(path.join(__dirname, 'public')));
+// app.use('/uploads', express.static(uploadDir));
 
 // 뷰 엔진
 app.set('views', path.join(__dirname, 'views'));
@@ -78,6 +86,12 @@ const renderSync = (name, data={}) => {
 const ensureAdmin = (req, res, next) => {
   if (req.session?.isAdmin) return next();
   res.redirect('/admin/login');
+};
+
+const ensureAuth = (req, res, next) => {
+  if (req.session?.user) return next();
+  req.session.nextUrl = req.originalUrl || '/';
+  res.redirect('/login');
 };
 
 // 홈(상품 목록) - 옵션 재고 합산 표시
@@ -118,35 +132,35 @@ app.get('/product/:id', ah(async (req, res) => {
 
 // ✅ 계좌송금 방식 체크아웃 (옵션 유효성 검사)
 // ✅ 계좌송금 체크아웃 (옵션/재고 검증 + user_id 저장)
-app.post('/checkout', ah(async (req, res) => {
-  // 값 추가
+// ✅ 회원만 주문
+app.post('/checkout', ensureAuth, ah(async (req, res) => {
   const {
-  product_id, variant_id, quantity,
-  buyer_name, buyer_email,
-  // ✅ 배송정보
-  ship_name, ship_phone, ship_postcode, ship_addr1, ship_addr2, ship_memo
-} = req.body;
-  // body에서 꺼낼 때 변수명 충돌/TDZ 방지 위해 "Raw" 이름으로 받기
-  //const { product_id, quantity, variant_id } = req.body || {};
-  const buyerNameRaw  = (req.body?.buyer_name  ?? '').trim();
-  const buyerEmailRaw = (req.body?.buyer_email ?? '').trim();
+    product_id, variant_id, quantity,
+    buyer_name, buyer_email,
+    ship_name, ship_phone, ship_postcode, ship_addr1, ship_addr2, ship_memo
+  } = req.body;
+
+  // 배송 필수값
+  if (!ship_name || !ship_phone || !ship_postcode || !ship_addr1) {
+    return res.status(400).send('배송지 정보를 입력해 주세요.');
+  }
 
   const product = await db.get('SELECT * FROM products WHERE id=?', [product_id]);
   if (!product) return res.status(400).send('상품 없음');
 
   const qty = Math.max(1, parseInt(quantity || '1', 10) || 1);
-  const amountKRW = product.price * qty;
+  const amountKRW = (product.price || 0) * qty;
 
-  // 옵션/재고 검증
   const variants = await db.all(
     'SELECT id,size,color,stock FROM product_variants WHERE product_id=?',
     [product.id]
   );
-  let option_size = null, option_color = null, vid = null;
+
+  let option_size = null, option_color = null, variantId = null;
 
   if (variants.length > 0) {
-    vid = parseInt(variant_id || '0', 10);
-    const v = variants.find(x => x.id === vid);
+    variantId = parseInt(variant_id || '0', 10);
+    const v = variants.find(x => x.id === variantId);
     if (!v) return res.status(400).send('옵션을 선택해주세요');
     if (qty > (v.stock || 0)) return res.status(400).send('선택한 옵션의 재고가 부족합니다');
     option_size = v.size; option_color = v.color;
@@ -154,28 +168,24 @@ app.post('/checkout', ah(async (req, res) => {
     if (qty > (product.stock || 0)) return res.status(400).send('재고가 부족합니다');
   }
 
-  // 로그인 사용자와 폼 값을 합쳐서 사용
-  const uid        = req.session.user?.id || null;
-  const buyerName  = buyerNameRaw  || req.session.user?.name  || '';
-  const buyerEmail = buyerEmailRaw || req.session.user?.email || '';
+  // 로그인 사용자 정보와 폼값 병합
+  const buyerName  = (buyer_name  || req.session.user?.name  || '').trim();
+  const buyerEmail = (buyer_email || req.session.user?.email || '').trim();
 
-  const order = await db.run(
-    `INSERT INTO orders (
-    product_id, quantity, amount,
-    buyer_name, buyer_email,
-    status, user_id, variant_id, option_size, option_color,
-    ship_name, ship_phone, ship_postcode, ship_addr1, ship_addr2, ship_memo
-  ) VALUES (?, ?, ?, ?, ?, 'pending', ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-    [product_id, quantity, amount,
-    buyer_name, buyer_email,
-    req.session.user.id, variantIdOrNull, optionSizeOrNull, optionColorOrNull,
-    ship_name, ship_phone, ship_postcode, ship_addr1, ship_addr2, ship_memo, 'pending']
-  );
-
-  if (!ship_name || !ship_phone || !ship_postcode || !ship_addr1) {
-  return res.status(400).send('배송지 정보를 입력해 주세요.');
-}
-
+  const order = await db.run(`
+    INSERT INTO orders (
+      product_id, quantity, amount,
+      buyer_name, buyer_email,
+      status, user_id, variant_id, option_size, option_color,
+      ship_name, ship_phone, ship_postcode, ship_addr1, ship_addr2, ship_memo
+    ) VALUES (?, ?, ?, ?, ?, 'pending', ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+  `, [
+    product.id, qty, amountKRW,
+    buyerName, buyerEmail,
+    req.session.user.id, variantId, option_size, option_color,
+    ship_name || null, ship_phone || null, ship_postcode || null,
+    ship_addr1 || null, ship_addr2 || null, ship_memo || null
+  ]);
 
   const optionText = option_size || option_color
     ? `${option_size || ''}${option_color ? ' / ' + option_color : ''}` : '';
@@ -189,6 +199,7 @@ app.post('/checkout', ah(async (req, res) => {
   });
   res.render('layout', { title: '입금 안내', body });
 }));
+
 
 
 // (관리자) 입금확인 처리 + 재고 차감
@@ -230,35 +241,53 @@ app.get('/admin/new', ensureAdmin, (req, res) => {
   res.render('layout', { title: '상품 등록', body: renderSync('admin_new') });
 });
 
+
 // 다중 이미지 + 옵션 생성
 app.post('/admin/new', ensureAdmin, upload.array('images', 12), ah(async (req, res) => {
   const { title, price, description } = req.body;
-  const stockRaw = parseInt(req.body.stock||'0',10);
-  const files = req.files || [];
-  const first = files[0]?.filename ? `/uploads/${files[0].filename}` : null;
-  const p = parseInt(price||'0',10);
+  const stock = Math.max(0, parseInt(req.body.stock || '0', 10) || 0);
+  const p = parseInt(price || '0', 10);
   if (!title || isNaN(p)) return res.status(400).send('입력값 오류');
 
-  const result = await db.run('INSERT INTO products (title, price, description, image_path, stock) VALUES (?,?,?,?,?)',
-    [title, p, description||'', first, isNaN(stockRaw)?0:stockRaw]);
+  // 1) 상품 생성(cover는 나중에 채움)
+  const result = await db.run(
+    'INSERT INTO products (title, price, description, image_path, stock) VALUES (?,?,?,?,?)',
+    [title, p, description || '', null, stock]
+  );
   const productId = result.lastID;
 
-  for (const f of files) {
-    const pathUrl = `/uploads/${f.filename}`;
-    await db.run('INSERT INTO product_images (product_id, image_path) VALUES (?,?)', [productId, pathUrl]);
+  // 2) 이미지들을 GCS에 업로드 → 절대 URL 저장
+  let coverUrl = null;
+  for (const f of (req.files || [])) {
+    const { url } = await uploadBuffer({
+      buffer: f.buffer,
+      contentType: f.mimetype,
+      objectName: buildObjectName({ prefix: 'products', productId, originalName: f.originalname })
+    });
+    if (!coverUrl) coverUrl = url;
+    await db.run(
+      'INSERT INTO product_images (product_id, image_path) VALUES (?,?)',
+      [productId, url]
+    );
+  }
+  if (coverUrl) {
+    await db.run('UPDATE products SET image_path=? WHERE id=?', [coverUrl, productId]);
   }
 
-  // 옵션 배열 수집 (opt_size[], opt_color[], opt_stock[])
-  const sizes = [].concat(req.body['opt_size[]'] || req.body.opt_size || []);
+  // 3) 옵션 저장 (opt_size[] / opt_color[] / opt_stock[])
+  const sizes  = [].concat(req.body['opt_size[]']  || req.body.opt_size  || []);
   const colors = [].concat(req.body['opt_color[]'] || req.body.opt_color || []);
   const stocks = [].concat(req.body['opt_stock[]'] || req.body.opt_stock || []);
 
-  for (let i=0;i<sizes.length;i++){
-    const s = (Array.isArray(sizes)?sizes[i]:sizes) || '';
-    const c = (Array.isArray(colors)?colors[i]:colors) || '';
-    const st = parseInt(Array.isArray(stocks)?stocks[i]:stocks,10);
-    if ((s||c) && !isNaN(st)){
-      await db.run('INSERT INTO product_variants (product_id, size, color, stock) VALUES (?,?,?,?)', [productId, s, c, Math.max(0, st)]);
+  for (let i = 0; i < Math.max(sizes.length, colors.length, stocks.length); i++) {
+    const s  = (Array.isArray(sizes)  ? sizes[i]  : sizes)  || '';
+    const c  = (Array.isArray(colors) ? colors[i] : colors) || '';
+    const st = parseInt(Array.isArray(stocks) ? stocks[i] : stocks, 10);
+    if ((s || c) && !isNaN(st)) {
+      await db.run(
+        'INSERT INTO product_variants (product_id, size, color, stock) VALUES (?,?,?,?)',
+        [productId, s.trim() || null, c.trim() || null, Math.max(0, st)]
+      );
     }
   }
 
@@ -266,10 +295,10 @@ app.post('/admin/new', ensureAdmin, upload.array('images', 12), ah(async (req, r
 }));
 
 // ▼ 템플릿에서 user를 쓰기 위한 미들웨어(중복 OK)
-app.use((req, res, next) => {
-  res.locals.user = req.session.user || null;
-  next();
-});
+// app.use((req, res, next) => {
+//   res.locals.user = req.session.user || null;
+//   next();
+// });
 
 // ▼ 로그인/회원가입/로그아웃 라우트 (중복되면 기존 것을 이걸로 교체)
 app.get('/login', (req, res) => {
