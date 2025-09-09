@@ -26,16 +26,21 @@ export function buildObjectName({ prefix='products', productId, originalName='' 
 }
 
 export async function uploadBuffer({ buffer, contentType, objectName }) {
-  const bucket = ensureBucket(); // ❗️이 시점에 환경변수 없으면 에러
+  const bucket = ensureBucket();
   const ct = contentType || mime.getType(objectName) || 'application/octet-stream';
   const file = bucket.file(objectName);
 
-  await file.save(buffer, {
-    contentType: ct,
-    resumable: false,
-    public: !_useSigned,
-    metadata: { cacheControl: 'public, max-age=31536000, immutable' }
-  });
+  try {
+    await file.save(buffer, {
+      contentType: ct,
+      resumable: false,
+      public: !_useSigned,
+      metadata: { cacheControl: 'public, max-age=31536000, immutable' }
+    });
+  } catch (e) {
+    e.message = `[GCS upload] ${objectName} :: ${e.message}`;
+    throw e;
+  }
 
   if (_useSigned) {
     const [url] = await file.getSignedUrl({
@@ -47,6 +52,7 @@ export async function uploadBuffer({ buffer, contentType, objectName }) {
   return { url: `${_publicBase}/${encodeURI(objectName)}`, objectName };
 }
 
+
 export async function deleteObject(objectName) {
   const bucket = ensureBucket();
   if (!objectName) return;
@@ -56,6 +62,16 @@ export async function deleteObject(objectName) {
 export function urlToObjectName(url='') {
   try {
     const u = new URL(url);
-    return decodeURI(u.pathname.replace(/^\/+/, ''));
-  } catch { return ''; }
+    const bucketName = process.env.GCS_BUCKET || '';
+    let p = decodeURI(u.pathname.replace(/^\/+/, ''));
+    // https://storage.googleapis.com/<bucket>/<path> 형태면 bucket 접두어 제거
+    if ((u.hostname === 'storage.googleapis.com' || u.hostname.endsWith('.googleapis.com')) &&
+        bucketName && p.startsWith(bucketName + '/')) {
+      p = p.slice(bucketName.length + 1);
+    }
+    return p;
+  } catch {
+    return '';
+  }
 }
+
