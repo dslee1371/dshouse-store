@@ -169,11 +169,11 @@ app.post('/admin/orders/:id/mark-paid', ensureAdmin, ah(async (req, res) => {
   if (!order) return res.redirect('/admin/orders');
 
   if (order.variant_id) {
-    await db.run('UPDATE product_variants SET stock = MAX(stock - ?, 0) WHERE id=?', [order.quantity, order.variant_id]);
+    await db.run('UPDATE product_variants SET stock = GREATEST(stock - ?, 0) WHERE id=?', [order.quantity, order.variant_id]);
   } else {
-    await db.run('UPDATE products SET stock = MAX(stock - ?, 0) WHERE id=?', [order.quantity, order.product_id]);
+    await db.run('UPDATE products SET stock = GREATEST(stock - ?, 0) WHERE id=?', [order.quantity, order.product_id]);
   }
-  await db.run('UPDATE orders SET status="paid" WHERE id=?', [req.params.id]);
+  await db.run("UPDATE orders SET status='paid' WHERE id=?", [req.params.id]);
 
   res.redirect('/admin/orders');
 }));

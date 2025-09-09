@@ -1,108 +1,147 @@
-import sqlite3 from 'sqlite3';
-import path from 'path';
-import { fileURLToPath } from 'url';
+// db.js (MySQL 전용 풀 + 초기화 + 헬퍼)
+import mysql from 'mysql2/promise';
 
-const __filename = fileURLToPath(import.meta.url);
-const __dirname = path.dirname(__filename);
+const {
+  MYSQL_HOST = 'dshouse-469704:asia-northeast1:dsstore',
+  MYSQL_PORT = '3306',
+  MYSQL_USER = 'root',
+  MYSQL_PASSWORD = 'Dongsu72071!',
+  MYSQL_DATABASE = 'kidswear',
+} = process.env;
 
-const dbPath = path.join(__dirname, 'data.sqlite');
-const db = new sqlite3.Database(dbPath);
+const pool = mysql.createPool({
+  host: MYSQL_HOST,
+  port: Number(MYSQL_PORT),
+  user: MYSQL_USER,
+  password: MYSQL_PASSWORD,
+  database: MYSQL_DATABASE,
+  waitForConnections: true,
+  connectionLimit: 10,
+});
 
-// Promise helpers
-const execP = (sql) => new Promise((resolve, reject) => db.exec(sql, (err) => err ? reject(err) : resolve()));
-const allP  = (sql, params=[]) => new Promise((resolve, reject) => db.all(sql, params, (err, rows) => err ? reject(err) : resolve(rows)));
-const runP  = (sql, params=[]) => new Promise((resolve, reject) => db.run(sql, params, function(err){ if (err) reject(err); else resolve(this); }));
+const query = async (sql, params=[]) => (await pool.query(sql, params))[0];
 
-// 테이블 & 마이그레이션 (완료될 때까지 대기)
+// 테이블/인덱스 보장
 const init = async () => {
-  // 1) 필수 테이블 일괄 생성
-  await execP(`
+  // DB는 이미 존재한다고 가정 (필요하면 CREATE DATABASE 권한 확인)
+  // 테이블 생성
+  await query(`
     CREATE TABLE IF NOT EXISTS users (
-      id INTEGER PRIMARY KEY AUTOINCREMENT,
-      email TEXT NOT NULL UNIQUE,
-      password_hash TEXT NOT NULL,
-      name TEXT,
+      id INT AUTO_INCREMENT PRIMARY KEY,
+      email VARCHAR(255) NOT NULL UNIQUE,
+      password_hash VARCHAR(255) NOT NULL,
+      name VARCHAR(255),
       created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-    );
-
-    CREATE TABLE IF NOT EXISTS products (
-      id INTEGER PRIMARY KEY AUTOINCREMENT,
-      title TEXT NOT NULL,
-      price INTEGER NOT NULL,
-      description TEXT,
-      image_path TEXT,
-      stock INTEGER DEFAULT 0,
-      created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-    );
-
-    CREATE TABLE IF NOT EXISTS orders (
-      id INTEGER PRIMARY KEY AUTOINCREMENT,
-      product_id INTEGER,
-      quantity INTEGER NOT NULL,
-      amount INTEGER NOT NULL,
-      buyer_name TEXT,
-      buyer_email TEXT,
-      status TEXT DEFAULT 'pending',
-      user_id INTEGER,
-      variant_id INTEGER,
-      option_size TEXT,
-      option_color TEXT,
-      created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-      FOREIGN KEY(product_id) REFERENCES products(id),
-      FOREIGN KEY(user_id) REFERENCES users(id)
-    );
-
-    CREATE TABLE IF NOT EXISTS product_images (
-      id INTEGER PRIMARY KEY AUTOINCREMENT,
-      product_id INTEGER NOT NULL,
-      image_path TEXT NOT NULL,
-      created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-      FOREIGN KEY(product_id) REFERENCES products(id)
-    );
-
-    CREATE TABLE IF NOT EXISTS product_variants (
-      id INTEGER PRIMARY KEY AUTOINCREMENT,
-      product_id INTEGER NOT NULL,
-      size TEXT,
-      color TEXT,
-      stock INTEGER DEFAULT 0,
-      created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-      FOREIGN KEY(product_id) REFERENCES products(id)
-    );
-
-    CREATE INDEX IF NOT EXISTS idx_variants_product ON product_variants(product_id);
-    CREATE INDEX IF NOT EXISTS idx_variants_key ON product_variants(product_id,size,color);
+    ) ENGINE=InnoDB;
   `);
 
-  // 2) 기존 orders 테이블 컬럼 보강 (이미 있으면 무시)
-  const cols = await allP(`PRAGMA table_info(orders)`);
-  const names = cols.map(c => c.name);
-  const alters = [];
-  if (!names.includes('user_id'))     alters.push('ALTER TABLE orders ADD COLUMN user_id INTEGER');
-  if (!names.includes('variant_id'))  alters.push('ALTER TABLE orders ADD COLUMN variant_id INTEGER');
-  if (!names.includes('option_size')) alters.push('ALTER TABLE orders ADD COLUMN option_size TEXT');
-  if (!names.includes('option_color'))alters.push('ALTER TABLE orders ADD COLUMN option_color TEXT');
-  for (const sql of alters) {
-    try { await runP(sql); } catch (e) { /* ignore if already added */ }
+  await query(`
+    CREATE TABLE IF NOT EXISTS products (
+      id INT AUTO_INCREMENT PRIMARY KEY,
+      title VARCHAR(255) NOT NULL,
+      price INT NOT NULL,
+      description TEXT,
+      image_path VARCHAR(512),
+      stock INT DEFAULT 0,
+      created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+    ) ENGINE=InnoDB;
+  `);
+
+  await query(`
+    CREATE TABLE IF NOT EXISTS orders (
+      id INT AUTO_INCREMENT PRIMARY KEY,
+      product_id INT,
+      quantity INT NOT NULL,
+      amount INT NOT NULL,
+      buyer_name VARCHAR(255),
+      buyer_email VARCHAR(255),
+      status VARCHAR(32) DEFAULT 'pending',
+      user_id INT,
+      variant_id INT,
+      option_size VARCHAR(64),
+      option_color VARCHAR(64),
+      created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+      CONSTRAINT fk_orders_product FOREIGN KEY (product_id) REFERENCES products(id) ON DELETE SET NULL,
+      CONSTRAINT fk_orders_user FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE SET NULL
+    ) ENGINE=InnoDB;
+  `);
+
+  await query(`
+    CREATE TABLE IF NOT EXISTS product_images (
+      id INT AUTO_INCREMENT PRIMARY KEY,
+      product_id INT NOT NULL,
+      image_path VARCHAR(512) NOT NULL,
+      created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+      CONSTRAINT fk_images_product FOREIGN KEY (product_id) REFERENCES products(id) ON DELETE CASCADE
+    ) ENGINE=InnoDB;
+  `);
+
+  await query(`
+    CREATE TABLE IF NOT EXISTS product_variants (
+      id INT AUTO_INCREMENT PRIMARY KEY,
+      product_id INT NOT NULL,
+      size VARCHAR(64),
+      color VARCHAR(64),
+      stock INT DEFAULT 0,
+      created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+      CONSTRAINT fk_variants_product FOREIGN KEY (product_id) REFERENCES products(id) ON DELETE CASCADE
+    ) ENGINE=InnoDB;
+  `);
+
+  // 컬럼 보강 (이미 있으면 패스)
+  const colExists = async (table, col) => {
+    const rows = await query(
+      `SELECT 1 FROM INFORMATION_SCHEMA.COLUMNS
+       WHERE TABLE_SCHEMA=? AND TABLE_NAME=? AND COLUMN_NAME=? LIMIT 1`,
+      [MYSQL_DATABASE, table, col]
+    );
+    return rows.length > 0;
+  };
+
+  // 예: 과거 스키마에서 없을 수 있는 컬럼들
+  if (!(await colExists('orders','user_id'))) {
+    await query(`ALTER TABLE orders ADD COLUMN user_id INT NULL`);
+  }
+  if (!(await colExists('orders','variant_id'))) {
+    await query(`ALTER TABLE orders ADD COLUMN variant_id INT NULL`);
+  }
+  if (!(await colExists('orders','option_size'))) {
+    await query(`ALTER TABLE orders ADD COLUMN option_size VARCHAR(64) NULL`);
+  }
+  if (!(await colExists('orders','option_color'))) {
+    await query(`ALTER TABLE orders ADD COLUMN option_color VARCHAR(64) NULL`);
   }
 
-  // 3) 인덱스 (컬럼 보강 후 생성)
-  try { await runP('CREATE INDEX IF NOT EXISTS idx_orders_user ON orders(user_id)'); } catch (e) { /* ignore */ }
+  // 인덱스 보장
+  const idxExists = async (table, indexName) => {
+    const rows = await query(
+      `SELECT 1 FROM INFORMATION_SCHEMA.STATISTICS
+       WHERE TABLE_SCHEMA=? AND TABLE_NAME=? AND INDEX_NAME=? LIMIT 1`,
+      [MYSQL_DATABASE, table, indexName]
+    );
+    return rows.length > 0;
+  };
+
+  if (!(await idxExists('product_variants','idx_variants_product'))) {
+    await query(`CREATE INDEX idx_variants_product ON product_variants(product_id)`);
+  }
+  if (!(await idxExists('product_variants','idx_variants_key'))) {
+    await query(`CREATE INDEX idx_variants_key ON product_variants(product_id, size, color)`);
+  }
+  if (!(await idxExists('orders','idx_orders_user'))) {
+    await query(`CREATE INDEX idx_orders_user ON orders(user_id)`);
+  }
 };
 
-const all = (sql, params=[]) => new Promise((resolve, reject) => {
-  db.all(sql, params, (err, rows) => err ? reject(err) : resolve(rows));
-});
+// 헬퍼 (기존 코드 호환: lastID/changes 제공)
+const all = async (sql, params=[]) => await query(sql, params);
+const get = async (sql, params=[]) => {
+  const rows = await query(sql, params);
+  return rows[0] || null;
+};
+const run = async (sql, params=[]) => {
+  const [result] = await pool.execute(sql, params);
+  return { lastID: result.insertId || 0, changes: result.affectedRows || 0 };
+};
 
-const get = (sql, params=[]) => new Promise((resolve, reject) => {
-  db.get(sql, params, (err, row) => err ? reject(err) : resolve(row));
-});
-
-const run = (sql, params=[]) => new Promise((resolve, reject) => {
-  db.run(sql, params, function(err){
-    if (err) return reject(err);
-    resolve(this);
-  });
-});
-
-export default { db, init, all, get, run };
+export default { init, all, get, run };
