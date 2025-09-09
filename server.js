@@ -19,7 +19,24 @@ const PORT = process.env.PORT || 8080;
 const ah = (fn) => (req, res, next) => Promise.resolve(fn(req, res, next)).catch(next);
 
 // DB 초기화 완료까지 대기 (테이블 생성/마이그레이션 보장)
-await db.init();
+const PORT = Number(process.env.PORT) || 8080;
+
+app.get('/healthz', (req,res) => res.status(200).send('ok')); // 선택
+
+app.listen(PORT, () => {
+  console.log(`Kidswear shop running on http://localhost:${PORT}`);
+});
+
+// DB 초기화는 비치명적으로 백그라운드에서
+(async () => {
+  try {
+    await db.init();
+    console.log('DB init OK');
+  } catch (e) {
+    console.error('DB init failed (non-fatal):', e?.message || e);
+  }
+})();
+
 
 // 업로드 스토리지
 const uploadDir = path.join(__dirname, 'uploads');
