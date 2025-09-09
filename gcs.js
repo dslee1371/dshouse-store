@@ -34,7 +34,7 @@ export async function uploadBuffer({ buffer, contentType, objectName }) {
     await file.save(buffer, {
       contentType: ct,
       resumable: false,
-      public: !_useSigned,
+     // public: !_useSigned,
       metadata: { cacheControl: 'public, max-age=31536000, immutable' }
     });
   } catch (e) {
