@@ -2,27 +2,28 @@
 FROM node:22-alpine
 
 ENV NODE_ENV=production
+ENV PORT=8080
 WORKDIR /app
 
-# 유틸(헬스체크용 curl) + PID1 처리용 tini
-RUN apk add --no-cache curl tini
+# 유틸/빌드도구 + tini
+RUN apk add --no-cache curl tini python3 make g++
 
-# 의존성 설치
-COPY package*.json ./
-RUN npm ci --omit=dev
+# 1) 의존성 메타만 먼저 복사(캐시 최적화)
+COPY package.json package-lock.json* ./
 
-# 앱 소스 복사
+# (선택) 만약 package.json에 mysql2가 아직 없다면 아래 한 줄을 임시로 활성화
+# RUN npm pkg set dependencies.mysql2="^3.11.3"
+
+# 2) lock 있으면 ci, 없으면 install
+RUN if [ -f package-lock.json ]; then npm ci --omit=dev; else npm install --omit=dev; fi
+
+# 3) 앱 소스 복사
 COPY . .
 
-# 업로드 디렉터리 생성(컨테이너 외부 볼륨으로 마운트 권장)
+# 업로드 디렉터리 (호스트 볼륨 권장)
 RUN mkdir -p /app/uploads && chown -R node:node /app
 
 USER node
-EXPOSE 3000
-
-# 헬스체크: 루트 페이지 응답 확인
-HEALTHCHECK --interval=30s --timeout=3s --start-period=15s \
-  CMD curl -fsS http://localhost:3000/ >/dev/null || exit 1
-
+EXPOSE 8080
 ENTRYPOINT ["/sbin/tini","-g","--"]
 CMD ["node","server.js"]
