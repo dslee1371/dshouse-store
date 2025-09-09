@@ -293,7 +293,15 @@ app.post('/logout', (req, res) => {
 });
 
 // ▼ 마이페이지
-const ensureAuth = (req,res,next)=> req.session?.user ? next() : res.redirect('/login');
+
+// 로그인 강제 + 리다이렉트 복귀 지원
+const ensureAuth = (req, res, next) => {
+  if (req.session?.user) return next();
+  // 로그인 후 돌아올 위치 저장
+  req.session.nextUrl = req.originalUrl || '/';
+  return res.redirect('/login');
+};
+
 app.get('/account', ensureAuth, ah(async (req, res) => {
   const user = req.session.user;
   const orders = await db.all(`
