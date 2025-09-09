@@ -21,9 +21,6 @@ const PORT = Number(process.env.PORT) || 8080;
 
 app.get('/healthz', (req,res) => res.status(200).send('ok')); // 선택
 
-app.listen(PORT, () => {
-  console.log(`Kidswear shop running on http://localhost:${PORT}`);
-});
 
 // DB 초기화는 비치명적으로 백그라운드에서
 (async () => {
