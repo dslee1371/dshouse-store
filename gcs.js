@@ -1,16 +1,23 @@
-// gcs.js
+// gcs.js (lazy init 버전)
 import { Storage } from '@google-cloud/storage';
 import { extname } from 'node:path';
 import crypto from 'node:crypto';
 import mime from 'mime';
 
-const storage = new Storage();
-const bucketName = process.env.GCS_BUCKET;
-if (!bucketName) throw new Error('GCS_BUCKET env is required');
+let _storage = null, _bucket = null, _publicBase = '', _useSigned = false;
 
-const bucket = storage.bucket(bucketName);
-const PUBLIC_BASE = process.env.GCS_PUBLIC_BASE || `https://storage.googleapis.com/${bucketName}`;
-const USE_SIGNED  = String(process.env.GCS_SIGNED_URLS || 'false') === 'true';
+function ensureBucket() {
+  if (_bucket) return _bucket;
+  const bucketName = process.env.GCS_BUCKET;
+  if (!bucketName) {
+    throw new Error('GCS not configured: set GCS_BUCKET (and GCS_PUBLIC_BASE/GCS_SIGNED_URLS)');
+  }
+  _storage = new Storage();
+  _bucket = _storage.bucket(bucketName);
+  _publicBase = process.env.GCS_PUBLIC_BASE || `https://storage.googleapis.com/${bucketName}`;
+  _useSigned  = String(process.env.GCS_SIGNED_URLS || 'false') === 'true';
+  return _bucket;
+}
 
 export function buildObjectName({ prefix='products', productId, originalName='' }) {
   const ext = extname(originalName).toLowerCase();
@@ -19,28 +26,29 @@ export function buildObjectName({ prefix='products', productId, originalName='' 
 }
 
 export async function uploadBuffer({ buffer, contentType, objectName }) {
+  const bucket = ensureBucket(); // ❗️이 시점에 환경변수 없으면 에러
   const ct = contentType || mime.getType(objectName) || 'application/octet-stream';
   const file = bucket.file(objectName);
 
   await file.save(buffer, {
     contentType: ct,
     resumable: false,
-    public: !USE_SIGNED,
+    public: !_useSigned,
     metadata: { cacheControl: 'public, max-age=31536000, immutable' }
   });
 
-  if (USE_SIGNED) {
+  if (_useSigned) {
     const [url] = await file.getSignedUrl({
       action: 'read',
-      expires: Date.now() + 1000 * 60 * 60 * 24 * 365 // 1년
+      expires: Date.now() + 1000*60*60*24*365
     });
     return { url, objectName };
   }
-
-  return { url: `${PUBLIC_BASE}/${encodeURI(objectName)}`, objectName };
+  return { url: `${_publicBase}/${encodeURI(objectName)}`, objectName };
 }
 
 export async function deleteObject(objectName) {
+  const bucket = ensureBucket();
   if (!objectName) return;
   await bucket.file(objectName).delete({ ignoreNotFound: true });
 }
@@ -48,6 +56,6 @@ export async function deleteObject(objectName) {
 export function urlToObjectName(url='') {
   try {
     const u = new URL(url);
-    return decodeURI(u.pathname.replace(/^\/+/, '')); // 도메인 뒤 경로를 objectName으로
+    return decodeURI(u.pathname.replace(/^\/+/, ''));
   } catch { return ''; }
 }
