@@ -1,0 +1,39 @@
+<section class="hero">
+  <div>
+    <h1>신상 아동복 오픈 ✨</h1>
+    <p>편안함과 활동성을 모두 잡은 데일리 상하의 세트. 지금 주문하면 <strong>계좌송금</strong> 확인 후 1주 이내 발송합니다.</p>
+    <div class="cta">
+      <a class="btn brand" href="#shop">상품 보러가기</a>
+      <a class="btn ghost" href="/admin/login">판매자 로그인</a>
+    </div>
+  </div>
+  <div>
+    <img src="/placeholder.png" alt="신상 아동복" style="width:100%;border-radius:16px;border:1px solid var(--border);box-shadow:var(--shadow);aspect-ratio:4/3;object-fit:cover"/>
+  </div>
+</section>
+
+<a id="shop"></a>
+<% if (products.length === 0) { %>
+  <h2 style="margin-top:24px">상품이 없습니다.</h2>
+  <p>판매자 대시보드에서 상품을 등록해주세요.</p>
+<% } else { %>
+  <div class="grid" style="margin-top:20px">
+    <% products.forEach(p => { %>
+      <article class="card">
+        <div class="img-wrap">
+          <img src="<%= p.image_path || '/placeholder.png' %>" alt="<%= p.title %>" />
+          <% if ((p.total_stock||0) <= 0) { %>
+            <span class="badge">품절</span>
+          <% } %>
+        </div>
+        <div class="p">
+          <h3 class="title"><%= p.title %></h3>
+          <div class="meta">
+            <div class="price"><%= p.price.toLocaleString() %>원</div>
+            <a class="btn" href="/product/<%= p.id %>">상세보기</a>
+          </div>
+        </div>
+      </article>
+    <% }) %>
+  </div>
+<% } %>

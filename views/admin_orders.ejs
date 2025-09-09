@@ -1,0 +1,30 @@
+<h2>주문 목록</h2>
+<table class="table">
+  <thead>
+    <tr><th>ID</th><th>상품</th><th>옵션</th><th>수량</th><th>금액</th><th>구매자</th><th>이메일</th><th>상태</th><th>일시</th><th>동작</th></tr>
+  </thead>
+  <tbody>
+    <% orders.forEach(o=>{ %>
+      <tr>
+        <td>#<%= o.id %></td>
+        <td><%= o.title %></td>
+        <td><%= (o.option_size||'') + (o.option_color? (' / ' + o.option_color) : '') %></td>
+        <td><%= o.quantity %></td>
+        <td><%= o.amount.toLocaleString() %>원</td>
+        <td><%= o.buyer_name %></td>
+        <td><%= o.buyer_email %></td>
+        <td><%= o.status %></td>
+        <td><%= new Date(o.created_at).toLocaleString('ko-KR') %></td>
+        <td>
+          <% if (o.status !== 'paid') { %>
+          <form method="POST" action="/admin/orders/<%= o.id %>/mark-paid" onsubmit="return confirm('이 주문을 입금확인 처리할까요?');">
+            <button class="btn" type="submit">입금확인(결제완료)</button>
+          </form>
+          <% } else { %>
+            <span style="color:#2e7d32">처리완료</span>
+          <% } %>
+        </td>
+      </tr>
+    <% }) %>
+  </tbody>
+</table>

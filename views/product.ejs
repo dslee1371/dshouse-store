@@ -1,0 +1,259 @@
+<% const hero = (gallery && gallery.length ? gallery[0] : (product.image_path || '/placeholder.png')); %>
+<% if (typeof user !== 'undefined' && user) { %>
+  <div class="auth-banner">
+    <span>😊</span>
+    <span><strong><%= user.name || user.email %></strong> 님 로그인 중</span>
+    <div class="right">
+      <a class="btn small ghost" href="/account">마이페이지</a>
+      <form style="display:inline" method="POST" action="/logout"><button class="btn small ghost" type="submit">로그아웃</button></form>
+    </div>
+  </div>
+<% } %>
+<div class="product-grid">
+  <div class="media">
+    <div class="main-image can-zoom-in" id="img-wrap">
+      <img id="main-img" src="<%= hero %>" alt="<%= product.title %>" />
+    </div>
+
+    <% if (gallery && gallery.length > 0) { %>
+      <div class="thumbs">
+        <% gallery.forEach(function(src, idx){ %>
+          <img class="thumb <%= idx===0 ? 'active' : '' %>" src="<%= src %>" data-src="<%= src %>" alt="<%= product.title %> 썸네일 <%= idx+1 %>" />
+        <% }) %>
+      </div>
+    <% } %>
+  </div>
+
+  <div>
+    <h1 style="margin:0 0 10px"><%= product.title %></h1>
+    <div class="price-block">
+      <div class="price-lg"><%= product.price.toLocaleString() %>원</div>
+      <span id="stockPill" class="stock-pill" aria-live="polite">재고 확인 중…</span>
+    </div>
+    <p style="font-size:14px;color:var(--muted);white-space:pre-wrap"><%= product.description || '' %></p>
+
+    <form class="form" method="POST" action="/checkout" style="margin-top:12px">
+      <input type="hidden" name="product_id" value="<%= product.id %>" />
+      <input type="hidden" name="variant_id" id="variantId" />
+
+      <% if (variants && variants.length) { %>
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px">
+          <label>사이즈
+            <select id="selSize"></select>
+          </label>
+          <label>색상
+            <select id="selColor"></select>
+          </label>
+        </div>
+      <% } %>
+
+      <label>수량
+        <input id="qty" type="number" name="quantity" value="1" min="1" required />
+      </label>
+      <label>이름
+        <input type="text" name="buyer_name" placeholder="구매자 성함" value="<%= (typeof user !== 'undefined' && user && user.name) || '' %>" autocomplete="name" />
+        <% if (typeof user !== 'undefined' && user) { %><small class="muted">회원 정보로 자동 입력되었습니다. 변경 가능</small><% } %>
+      </label>
+      <label>이메일
+        <input type="email" name="buyer_email" placeholder="연락 받을 이메일" value="<%= (typeof user !== 'undefined' && user && user.email) || '' %>" <%= (typeof user !== 'undefined' && user) ? 'readonly' : '' %> autocomplete="email" required />
+        <% if (typeof user !== 'undefined' && user) { %><small class="muted">가입 이메일로 주문 알림을 보내드려요</small><% } %>
+      </label>
+      <button id="buyBtn" class="btn brand" type="submit">주문하기(계좌송금)</button>
+    </form>
+
+    <div class="notice-card">
+      <div class="title">계좌송금 안내</div>
+      <div>계좌번호: <span class="bank">농협 241097-56-078780 장은애</span> <button class="btn ghost" id="copyBtn" type="button">복사</button></div>
+      <div style="margin-top:6px;color:var(--muted)">입금 확인 후 발송 일정을 안내드립니다. 평균 1주 소요.</div>
+    </div>
+  </div>
+</div>
+
+<script>
+  (function(){
+    const container = document.getElementById('img-wrap');
+    const main = document.getElementById('main-img');
+    const thumbs = document.querySelectorAll('.thumb');
+
+    // 썸네일 클릭: 이미지 교체 + 줌 초기화
+    thumbs.forEach(t => t.addEventListener('click', () => {
+      const src = t.dataset.src || t.src;
+      main.src = src;
+      document.querySelectorAll('.thumb.active').forEach(x=>x.classList.remove('active'));
+      t.classList.add('active');
+      resetZoom();
+    }));
+
+    // Zoom/Pan 상태
+    let scale = 1, minScale = 1, maxScale = 4;
+    let x = 0, y = 0; // translate px
+    let dragging = false, startX = 0, startY = 0, originX = 0, originY = 0;
+    let pinching = false, startDist = 0, startScale = 1;
+
+    function apply(){
+      main.style.transform = `translate(${x}px, ${y}px) scale(${scale})`;
+      updateCursor();
+    }
+    function clampPan(){
+      const rect = container.getBoundingClientRect();
+      const maxX = Math.max(0, (rect.width * scale - rect.width) / 2);
+      const maxY = Math.max(0, (rect.height * scale - rect.height) / 2);
+      x = Math.min(maxX, Math.max(-maxX, x));
+      y = Math.min(maxY, Math.max(-maxY, y));
+    }
+    function resetZoom(){
+      scale = 1; x = 0; y = 0; apply();
+    }
+    function updateCursor(){
+      container.classList.toggle('can-zoom-in', scale === 1);
+      container.classList.toggle('can-zoom-out', scale > 1);
+      container.classList.toggle('grabbable', scale > 1);
+    }
+
+    // 더블클릭으로 토글 줌
+    container.addEventListener('dblclick', (e) => {
+      if (scale === 1) { scale = 2; } else { resetZoom(); return; }
+      clampPan(); apply();
+    });
+
+    // 휠 줌(중심 기준)
+    container.addEventListener('wheel', (e) => {
+      e.preventDefault();
+      const k = e.deltaY > 0 ? 0.9 : 1.1;
+      const newScale = Math.min(maxScale, Math.max(minScale, scale * k));
+      scale = newScale;
+      if (scale === 1) { x = 0; y = 0; }
+      clampPan(); apply();
+    }, { passive: false });
+
+    // 드래그 팬
+    container.addEventListener('mousedown', (e) => {
+      if (scale === 1) return; // 확대 시에만
+      dragging = true; container.classList.add('grabbing');
+      startX = e.clientX; startY = e.clientY; originX = x; originY = y;
+    });
+    window.addEventListener('mousemove', (e) => {
+      if (!dragging) return;
+      x = originX + (e.clientX - startX);
+      y = originY + (e.clientY - startY);
+      clampPan(); apply();
+    });
+    window.addEventListener('mouseup', () => { dragging = false; container.classList.remove('grabbing'); });
+
+    // 터치: 팬 + 핀치 줌
+    container.addEventListener('touchstart', (e) => {
+      if (e.touches.length === 1) {
+        if (scale === 1) return; // 확대 상태에서만 팬
+        dragging = true; startX = e.touches[0].clientX; startY = e.touches[0].clientY; originX = x; originY = y;
+      } else if (e.touches.length === 2) {
+        pinching = true; dragging = false;
+        startDist = dist(e.touches[0], e.touches[1]);
+        startScale = scale;
+      }
+    }, { passive: false });
+    container.addEventListener('touchmove', (e) => {
+      e.preventDefault();
+      if (pinching && e.touches.length === 2) {
+        const d = dist(e.touches[0], e.touches[1]);
+        scale = Math.min(maxScale, Math.max(minScale, startScale * (d / startDist)));
+        if (scale === 1) { x = 0; y = 0; }
+        clampPan(); apply();
+      } else if (dragging && e.touches.length === 1) {
+        x = originX + (e.touches[0].clientX - startX);
+        y = originY + (e.touches[0].clientY - startY);
+        clampPan(); apply();
+      }
+    }, { passive: false });
+    container.addEventListener('touchend', (e) => {
+      if (e.touches.length === 0) { dragging = false; pinching = false; container.classList.remove('grabbing'); }
+    }, { passive: false });
+    function dist(a,b){ const dx=a.clientX-b.clientX, dy=a.clientY-b.clientY; return Math.hypot(dx,dy); }
+
+    // 복사 버튼
+    const copyBtn = document.getElementById('copyBtn');
+    copyBtn?.addEventListener('click', async () => {
+      try { await navigator.clipboard.writeText('농협 241097-56-078780 장은애'); copyBtn.textContent = '복사됨'; setTimeout(()=> copyBtn.textContent='복사', 1500); } catch(e){ alert('복사 실패'); }
+    });
+
+    // ✅ 옵션 드롭다운 로직
+    const variants = <%- JSON.stringify(variants || []) %>;
+    const selSize = document.getElementById('selSize');
+    const selColor = document.getElementById('selColor');
+    const variantId = document.getElementById('variantId');
+    const qty = document.getElementById('qty');
+    const buyBtn = document.getElementById('buyBtn');
+    const pill = document.getElementById('stockPill');
+
+    function unique(arr){ return [...new Set(arr.filter(Boolean))]; }
+    function key(s,c){ return `${s||''}|${c||''}`; }
+
+    const sizes = unique(variants.map(v=>v.size));
+    const colors = unique(variants.map(v=>v.color));
+
+    function fillSelect(sel, items){
+      sel.innerHTML = '';
+      const opt0 = document.createElement('option');
+      opt0.value = ''; opt0.textContent = '선택하세요'; sel.appendChild(opt0);
+      items.forEach(v=>{ const o=document.createElement('option'); o.value=v; o.textContent=v; sel.appendChild(o); });
+    }
+
+    function currentVariant(){
+      const s = selSize?.value || ''; const c = selColor?.value || '';
+      return variants.find(v => (v.size||'')===s && (v.color||'')===c);
+    }
+
+    function updateStockView(){
+      const v = currentVariant();
+      if (!variants.length){
+        const available = <%= (product.stock||0) %>;
+        pill.className = 'stock-pill ' + (available>0?'good':'bad');
+        pill.textContent = available>0 ? `재고 ${available}개` : '품절';
+        qty.max = Math.max(1, available);
+        buyBtn.disabled = available<=0;
+        return;
+      }
+      if (!v){
+        pill.className = 'stock-pill'; pill.textContent = '옵션을 선택하세요';
+        qty.max = 1; buyBtn.disabled = true; variantId.value = '';
+      } else {
+        pill.className = 'stock-pill ' + (v.stock>0?'good':'bad');
+        pill.textContent = v.stock>0 ? `재고 ${v.stock}개` : '품절';
+        qty.max = Math.max(1, v.stock||1);
+        buyBtn.disabled = (v.stock||0) <= 0;
+        variantId.value = v.id;
+      }
+    }
+
+    if (variants.length){
+      fillSelect(selSize, sizes); fillSelect(selColor, colors);
+      selSize.addEventListener('change', updateStockView);
+      selColor.addEventListener('change', updateStockView);
+    }
+    // 자동 선택(옵션이 하나뿐이면)
+    if (variants.length){
+      if (sizes.length === 1) selSize.value = sizes[0];
+      if (colors.length === 1) selColor.value = colors[0];
+      updateStockView();
+    } else {
+      updateStockView();
+    }
+
+    // 폼 제출 UX: 옵션 미선택 방지 + 중복 제출 방지
+    const form = document.querySelector('form.form');
+    form?.addEventListener('submit', (e) => {
+      if (variants.length && !currentVariant()){
+        e.preventDefault();
+        pill.className = 'stock-pill';
+        pill.textContent = '옵션을 선택하세요';
+        selSize?.focus();
+        return;
+      }
+      buyBtn.disabled = true;
+      buyBtn.dataset.prev = buyBtn.textContent;
+      buyBtn.textContent = '주문 처리 중...';
+    });
+
+    // 최초 상태 적용
+    apply();
+  })();
+</script>

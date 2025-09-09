@@ -1,0 +1,56 @@
+<h2>결제</h2>
+<p>주문상품: <strong><%= productTitle %></strong></p>
+<p>결제금액: <strong><%= amount.toLocaleString() %>원</strong></p>
+
+<div id="payment-method" style="margin:16px 0;"></div>
+<div id="agreement" style="margin:16px 0;"></div>
+<button id="pay-button" class="btn">결제하기</button>
+
+<div id="error-box" style="margin-top:12px;color:#b00020;font-size:14px;"></div>
+
+<script src="https://js.tosspayments.com/v2/"></script>
+<script>
+  (async () => {
+    const clientKey = "<%= clientKey %>";
+    const orderId = "<%= orderId %>";
+    const amount = <%= amount %>;
+    const title = "<%= productTitle %>";
+    const $err = document.getElementById('error-box');
+
+    try {
+      if (!clientKey || clientKey.startsWith('test_ck_') === false && clientKey.startsWith('live_ck_') === false) {
+        throw new Error('TOSS_CLIENT_KEY가 비어있거나 형식이 올바르지 않습니다 (.env 확인)');
+      }
+
+      const tossPayments = TossPayments(clientKey);
+      const widgets = tossPayments.widgets({ customerKey: "guest" });
+      await widgets.setAmount({ currency: "KRW", value: amount });
+
+      // ✅ 계좌이체만 노출
+      await widgets.renderPaymentMethods({
+        selector: "#payment-method",
+        paymentMethods: ["TRANSFER"]
+      });
+      await widgets.renderAgreement({ selector: "#agreement" });
+
+      document.getElementById("pay-button").addEventListener("click", async () => {
+        try {
+          await widgets.requestPayment({
+            orderId: orderId,
+            orderName: title,
+            successUrl: window.location.origin + "/toss/confirm",
+            failUrl: window.location.origin + "/toss/fail"
+          });
+        } catch (e) {
+          console.error(e);
+          $err.textContent = "결제 요청 중 오류: " + (e?.message || e);
+        }
+      });
+    } catch (e) {
+      console.error(e);
+      $err.textContent = "초기화 오류: " + (e?.message || e);
+      // 초기화 실패하면 버튼 비활성화
+      document.getElementById("pay-button").disabled = true;
+    }
+  })();
+</script>

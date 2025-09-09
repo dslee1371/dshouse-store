@@ -1,0 +1,24 @@
+<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:16px">
+  <h2>판매자 대시보드</h2>
+  <div style="display:flex;gap:8px">
+    <a class="btn secondary" href="/admin/orders">주문목록</a>
+    <a class="btn" href="/admin/new">상품 등록</a>
+  </div>
+</div>
+<table class="table">
+  <thead>
+    <tr><th>ID</th><th>이미지</th><th>상품명</th><th>가격</th><th>재고</th><th>등록일</th></tr>
+  </thead>
+  <tbody>
+    <% products.forEach(p=>{ %>
+      <tr>
+        <td><%= p.id %></td>
+        <td><img src="<%= p.image_path || '/placeholder.png' %>" style="width:60px;height:60px;object-fit:cover;border-radius:8px;border:1px solid #eee" /></td>
+        <td><a href="/product/<%= p.id %>"><%= p.title %></a></td>
+        <td><%= p.price.toLocaleString() %>원</td>
+        <td><%= p.stock %></td>
+        <td><%= new Date(p.created_at).toLocaleString('ko-KR') %></td>
+      </tr>
+    <% }) %>
+  </tbody>
+</table>
