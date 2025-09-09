@@ -338,7 +338,8 @@ app.post('/logout', (req, res) => {
 });
 
 // ▼ 마이페이지
-const ensureAuth = (req,res,next)=> req.session?.user ? next() : res.redirect('/login');
+//const ensureAuth = (req,res,next)=> req.session?.user ? next() : res.redirect('/login');
+
 app.get('/account', ensureAuth, ah(async (req, res) => {
   const user = req.session.user;
   const orders = await db.all(`
