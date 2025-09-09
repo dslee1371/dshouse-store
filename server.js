@@ -118,7 +118,7 @@ app.get('/product/:id', ah(async (req, res) => {
 
 // ✅ 계좌송금 방식 체크아웃 (옵션 유효성 검사)
 // ✅ 계좌송금 체크아웃 (옵션/재고 검증 + user_id 저장)
-app.post('/checkout', ah(async (req, res) => {
+app.post('/checkout', ensureAuth, ah(async (req, res) => {
   // body에서 꺼낼 때 변수명 충돌/TDZ 방지 위해 "Raw" 이름으로 받기
   const { product_id, quantity, variant_id } = req.body || {};
   const buyerNameRaw  = (req.body?.buyer_name  ?? '').trim();
