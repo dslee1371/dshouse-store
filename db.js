@@ -120,13 +120,6 @@ const init = async () => {
       await query(`ALTER TABLE orders ADD COLUMN option_color VARCHAR(64) NULL`);
     }
     
-    // db.js init() 안, colExists 사용 파트에 추가
-    if (!(await colExists('orders','ship_name')))     await query(`ALTER TABLE orders ADD COLUMN ship_name VARCHAR(100) NULL`);
-    if (!(await colExists('orders','ship_phone')))    await query(`ALTER TABLE orders ADD COLUMN ship_phone VARCHAR(30) NULL`);
-    if (!(await colExists('orders','ship_postcode'))) await query(`ALTER TABLE orders ADD COLUMN ship_postcode VARCHAR(10) NULL`);
-    if (!(await colExists('orders','ship_addr1')))    await query(`ALTER TABLE orders ADD COLUMN ship_addr1 VARCHAR(255) NULL`);
-    if (!(await colExists('orders','ship_addr2')))    await query(`ALTER TABLE orders ADD COLUMN ship_addr2 VARCHAR(255) NULL`);
-    if (!(await colExists('orders','ship_memo')))     await query(`ALTER TABLE orders ADD COLUMN ship_memo VARCHAR(255) NULL`);
     
     // 인덱스 보장
     const idxExists = async (table, indexName) => {
