@@ -67,9 +67,7 @@ app.use(session({
 // 정적 파일
 // app.use(express.static(path.join(__dirname, 'public')));
 // app.use('/uploads', express.static(uploadDir));
-app.use('/static', express.static(path.join(__dirname, 'public'), {
-  maxAge: '1y', etag: false
-}));
+app.use(express.static(path.join(__dirname,'public')));
 
 // 뷰 엔진
 app.set('views', path.join(__dirname, 'views'));
