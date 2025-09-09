@@ -68,7 +68,45 @@
                  value="<%= (user && user.email) || '' %>" readonly autocomplete="email" required />
           <small class="muted">가입 이메일로 주문 알림을 보내드려요</small>
         </label>
-              
+        <!-- 배송지 정보 -->
+        <div class="notice-card" style="margin-top:12px">
+          <div class="title">배송지 정보</div>
+          <div style="display:grid;gap:10px">
+            <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px">
+              <label>받는 분 이름
+                <input type="text" name="ship_name"
+                      value="<%= (user && user.name) || '' %>"
+                      placeholder="수령인 성함" required />
+              </label>
+              <label>연락처
+                <input type="tel" name="ship_phone"
+                      placeholder="010-1234-5678" required />
+              </label>
+            </div>
+
+            <div style="display:grid;grid-template-columns:160px 1fr 120px;gap:10px">
+              <label>우편번호
+                <input type="text" name="ship_postcode" placeholder="예: 06236" required />
+              </label>
+              <label>주소
+                <input type="text" name="ship_addr1" placeholder="도로명 주소" required />
+              </label>
+              <div style="align-self:end">
+                <!-- 선택: 다음(카카오) 주소검색을 추후 연결 가능 -->
+                <button type="button" id="findAddrBtn" class="btn ghost" style="width:100%">주소검색</button>
+              </div>
+            </div>
+
+            <label>상세주소
+              <input type="text" name="ship_addr2" placeholder="동/호수 등(선택)" />
+            </label>
+
+            <label>요청사항(선택)
+              <input type="text" name="ship_memo" placeholder="부재 시 문 앞에 놓아주세요 등" />
+            </label>
+          </div>
+        </div>
+
 
         <button id="buyBtn" class="btn brand" type="submit">주문하기(계좌송금)</button>
       </form>

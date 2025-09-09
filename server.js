@@ -127,7 +127,7 @@ app.post('/checkout', ah(async (req, res) => {
   ship_name, ship_phone, ship_postcode, ship_addr1, ship_addr2, ship_memo
 } = req.body;
   // body에서 꺼낼 때 변수명 충돌/TDZ 방지 위해 "Raw" 이름으로 받기
-  const { product_id, quantity, variant_id } = req.body || {};
+  //const { product_id, quantity, variant_id } = req.body || {};
   const buyerNameRaw  = (req.body?.buyer_name  ?? '').trim();
   const buyerEmailRaw = (req.body?.buyer_email ?? '').trim();
 
