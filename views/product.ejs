@@ -93,7 +93,18 @@
               </label>
               <div style="align-self:end">
                 <!-- 선택: 다음(카카오) 주소검색을 추후 연결 가능 -->
-                <button type="button" id="findAddrBtn" class="btn ghost" style="width:100%">주소검색</button>
+                <button
+                  type="button"
+                  id="findAddrBtn"
+                  class="btn ghost addr-search"
+                  aria-controls="postcodeLayer"
+                  aria-expanded="false"
+                  style="width:100%"
+                >
+                  <span class="icon" aria-hidden="true">🔎</span>
+                  <span class="label">주소검색</span>
+                </button>
+
               </div>
             </div>
 
@@ -334,6 +345,25 @@
         buyBtn.textContent = '주문 처리 중...';
       }
     });
+
+
+    // 이미 선언돼 있는 것 재사용: findBtn, dim, layer, wrap, closeBtn ...
+    function showLayer(){
+      if(layer&&dim){ layer.style.display='block'; dim.style.display='block'; }
+      if (findBtn){ findBtn.classList.add('is-active'); findBtn.setAttribute('aria-expanded','true'); }
+    }
+    function hideLayer(){
+      if(layer&&dim){ layer.style.display='none';  dim.style.display='none'; }
+      if (findBtn){ findBtn.classList.remove('is-active'); findBtn.setAttribute('aria-expanded','false'); }
+    }
+    
+    // 호버/포커스 보조(일부 터치/펜 환경 대응)
+    findBtn?.addEventListener('mouseenter', ()=> findBtn.classList.add('is-hover'));
+    findBtn?.addEventListener('mouseleave', ()=> findBtn.classList.remove('is-hover'));
+    findBtn?.addEventListener('focus',      ()=> findBtn.classList.add('is-focus'));
+    findBtn?.addEventListener('blur',       ()=> findBtn.classList.remove('is-focus'));
+
+
 
     // -----------------------------
     // 🏷️ 다음(카카오) 주소검색 연동
