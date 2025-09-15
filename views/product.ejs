@@ -347,26 +347,8 @@
     });
 
 
-    // 이미 선언돼 있는 것 재사용: findBtn, dim, layer, wrap, closeBtn ...
-    function showLayer(){
-      if(layer&&dim){ layer.style.display='block'; dim.style.display='block'; }
-      if (findBtn){ findBtn.classList.add('is-active'); findBtn.setAttribute('aria-expanded','true'); }
-    }
-    function hideLayer(){
-      if(layer&&dim){ layer.style.display='none';  dim.style.display='none'; }
-      if (findBtn){ findBtn.classList.remove('is-active'); findBtn.setAttribute('aria-expanded','false'); }
-    }
-    
-    // 호버/포커스 보조(일부 터치/펜 환경 대응)
-    findBtn?.addEventListener('mouseenter', ()=> findBtn.classList.add('is-hover'));
-    findBtn?.addEventListener('mouseleave', ()=> findBtn.classList.remove('is-hover'));
-    findBtn?.addEventListener('focus',      ()=> findBtn.classList.add('is-focus'));
-    findBtn?.addEventListener('blur',       ()=> findBtn.classList.remove('is-focus'));
-
-
-
     // -----------------------------
-    // 🏷️ 다음(카카오) 주소검색 연동
+    // 🏷️ 다음(카카오) 주소검색 연동 (안정화 버전)
     // -----------------------------
     const findBtn   = document.getElementById('findAddrBtn');
     const dim       = document.getElementById('postcodeDim');
@@ -374,25 +356,36 @@
     const wrap      = document.getElementById('postcodeWrap');
     const closeBtn  = document.getElementById('postcodeClose');
 
-    const $postcode  = document.querySelector('input[name="ship_postcode"]');
-    const $addr1     = document.querySelector('input[name="ship_addr1"]');
-    const $addr2     = document.querySelector('input[name="ship_addr2"]');
+    const $postcode = document.querySelector('input[name="ship_postcode"]');
+    const $addr1    = document.querySelector('input[name="ship_addr1"]');
+    const $addr2    = document.querySelector('input[name="ship_addr2"]');
 
-    function showLayer(){ if(layer&&dim){ layer.style.display='block'; dim.style.display='block'; } }
-    function hideLayer(){ if(layer&&dim){ layer.style.display='none';  dim.style.display='none'; } }
-
-    async function ensureDaumPostcode(){
-      if (window.daum?.Postcode) return;
-      await new Promise((resolve, reject) => {
-        const s = document.createElement('script');
-        s.src = 'https://t1.daumcdn.net/mapjsapi/bundle/postcode/prod/postcode.v2.js';
-        s.onload = resolve; s.onerror = reject;
-        document.head.appendChild(s);
-      });
+    function showLayer(){
+      if (layer && dim) { layer.style.display='block'; dim.style.display='block'; }
+      if (findBtn){ findBtn.classList.add('is-active'); findBtn.setAttribute('aria-expanded','true'); }
+    }
+    function hideLayer(){
+      if (layer && dim) { layer.style.display='none'; dim.style.display='none'; }
+      if (findBtn){ findBtn.classList.remove('is-active'); findBtn.setAttribute('aria-expanded','false'); }
     }
 
-    function openPostcode(){
-      if (!wrap) return;
+    // 외부 스크립트 로더(중복 로딩 방지)
+    async function ensureDaumPostcode(){
+      if (window.daum?.Postcode) return;
+      if (window.__postcodeLoading) return window.__postcodeLoading;
+      window.__postcodeLoading = new Promise((resolve, reject) => {
+        const s = document.createElement('script');
+        s.src = 'https://t1.daumcdn.net/mapjsapi/bundle/postcode/prod/postcode.v2.js';
+        s.async = true;
+        s.onload = () => resolve();
+        s.onerror = () => reject(new Error('postcode script load failed'));
+        document.head.appendChild(s);
+      });
+      return window.__postcodeLoading;
+    }
+
+    function openPostcodeEmbed(){
+      // 임베드 레이어 방식
       const pc = new daum.Postcode({
         oncomplete: function(data){
           const postcode = data.zonecode;
@@ -402,22 +395,57 @@
           $addr2?.focus();
           hideLayer();
         },
-        onresize: function(size){ wrap.style.height = size.height + 'px'; },
+        onresize: function(size){ if (wrap) wrap.style.height = size.height + 'px'; },
         width: '100%', height: '100%'
       });
       pc.embed(wrap, { autoClose: false });
       showLayer();
     }
 
-    findBtn?.addEventListener('click', async ()=> {
-      try { await ensureDaumPostcode(); openPostcode(); }
-      catch(e){ alert('주소검색 로딩에 실패했습니다. 잠시 후 다시 시도해 주세요.'); }
+    function openPostcodePopup(){
+      // 팝업(새 창) 대체 수단 — 임베드가 어려운 환경 대비
+      new daum.Postcode({
+        oncomplete: function(data){
+          const postcode = data.zonecode;
+          const addr = data.userSelectedType === 'R' ? data.roadAddress : data.jibunAddress;
+          if ($postcode) $postcode.value = postcode;
+          if ($addr1)    $addr1.value    = addr;
+          $addr2?.focus();
+        }
+      }).open();
+    }
+
+    // ✅ 클릭 안정화: 이벤트 위임 + 강제 preventDefault
+    document.addEventListener('click', async (e) => {
+      const btn = e.target.closest('#findAddrBtn');
+      if (!btn) return;
+
+      e.preventDefault();  // 폼 내부 클릭시 우발적 제출/리로딩 방지
+      if (btn.disabled) return;
+
+      const prevLabel = btn.querySelector('.label')?.textContent;
+      btn.disabled = true;
+      btn.classList.add('is-active');
+      const labelEl = btn.querySelector('.label');
+      if (labelEl) labelEl.textContent = '로딩중...';
+
+      try {
+        await ensureDaumPostcode();
+        if (wrap && layer && dim) openPostcodeEmbed();
+        else openPostcodePopup();
+      } catch (err) {
+        console.error('[postcode] load error:', err);
+        alert('주소검색 로딩에 실패했습니다. 잠시 후 다시 시도해 주세요.');
+      } finally {
+        btn.disabled = false;
+        btn.classList.remove('is-active');
+        if (labelEl) labelEl.textContent = prevLabel || '주소검색';
+      }
     });
+
+    // 닫기/딤/ESC 핸들러
     closeBtn?.addEventListener('click', hideLayer);
     dim?.addEventListener('click', hideLayer);
-    window.addEventListener('keydown', (e)=>{ if(e.key === 'Escape') hideLayer(); });
-
-    // 초기 렌더
-    apply();
+    window.addEventListener('keydown', (e)=>{ if (e.key === 'Escape') hideLayer(); });
   })();
 </script>
