@@ -93,7 +93,18 @@
               </label>
               <div style="align-self:end">
                 <!-- 선택: 다음(카카오) 주소검색을 추후 연결 가능 -->
-                <button type="button" id="findAddrBtn" class="btn ghost" style="width:100%">주소검색</button>
+                <button
+                  type="button"
+                  id="findAddrBtn"
+                  class="btn ghost addr-search"
+                  aria-controls="postcodeLayer"
+                  aria-expanded="false"
+                  style="width:100%"
+                >
+                  <span class="icon" aria-hidden="true">🔎</span>
+                  <span class="label">주소검색</span>
+                </button>
+
               </div>
             </div>
 
