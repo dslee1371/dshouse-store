@@ -110,6 +110,7 @@
 
         <button id="buyBtn" class="btn brand" type="submit">주문하기(계좌송금)</button>
       </form>
+
     <% } else { %>
       <!-- 🚫 비로그인: 주문 불가 안내 + 로그인/회원가입 유도 -->
       <div class="notice-card" style="margin-top:16px">
@@ -121,6 +122,15 @@
         </div>
       </div>
     <% } %>
+<!-- 주소검색 레이어 & 딤 (처음엔 숨김) -->
+<div id="postcodeDim" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.45);z-index:1000;"></div>
+<div id="postcodeLayer" style="display:none;position:fixed;top:50%;left:50%;transform:translate(-50%,-50%);width:min(420px,94vw);height:480px;z-index:1001;background:#fff;border:1px solid var(--border,#e5e7eb);box-shadow:0 10px 30px rgba(0,0,0,.2);border-radius:12px;overflow:hidden;">
+  <div style="display:flex;align-items:center;justify-content:space-between;padding:8px 12px;border-bottom:1px solid var(--border,#e5e7eb);">
+    <strong>주소 검색</strong>
+    <button type="button" id="postcodeClose" class="btn small ghost">닫기</button>
+  </div>
+  <div id="postcodeWrap" style="width:100%;height:430px;"></div>
+</div>
 
     <div class="notice-card">
       <div class="title">계좌송금 안내</div>
@@ -132,6 +142,7 @@
     </div>
   </div>
 </div>
+
 
 <script>
   (function(){
@@ -165,9 +176,7 @@
       x = Math.min(maxX, Math.max(-maxX, x));
       y = Math.min(maxY, Math.max(-maxY, y));
     }
-    function resetZoom(){
-      scale = 1; x = 0; y = 0; apply();
-    }
+    function resetZoom(){ scale = 1; x = 0; y = 0; apply(); }
     function updateCursor(){
       container.classList.toggle('can-zoom-in', scale === 1);
       container.classList.toggle('can-zoom-out', scale > 1);
@@ -239,12 +248,10 @@
         await navigator.clipboard.writeText('농협 241097-56-078780 장은애');
         copyBtn.textContent = '복사됨';
         setTimeout(()=> copyBtn.textContent='복사', 1500);
-      } catch(e){
-        alert('복사 실패');
-      }
+      } catch(e){ alert('복사 실패'); }
     });
 
-    // ✅ 옵션/재고 로직 (폼이 없을 수도 있으므로 안전 가드 포함)
+    // ✅ 옵션/재고 로직
     const variants = <%- JSON.stringify(variants || []) %>;
     const selSize   = document.getElementById('selSize');
     const selColor  = document.getElementById('selColor');
@@ -304,7 +311,6 @@
       selSize && selSize.addEventListener('change', updateStockView);
       selColor && selColor.addEventListener('change', updateStockView);
     }
-    // 자동 선택(옵션 하나뿐이면)
     if (variants.length){
       if (sizes.length === 1 && selSize) selSize.value = sizes[0];
       if (colors.length === 1 && selColor) selColor.value = colors[0];
@@ -313,7 +319,6 @@
       updateStockView();
     }
 
-    // 폼 제출 UX (폼이 있을 때만)
     const form = document.querySelector('form.form');
     form?.addEventListener('submit', (e) => {
       if (variants.length && !currentVariant()){
@@ -329,6 +334,58 @@
         buyBtn.textContent = '주문 처리 중...';
       }
     });
+
+    // -----------------------------
+    // 🏷️ 다음(카카오) 주소검색 연동
+    // -----------------------------
+    const findBtn   = document.getElementById('findAddrBtn');
+    const dim       = document.getElementById('postcodeDim');
+    const layer     = document.getElementById('postcodeLayer');
+    const wrap      = document.getElementById('postcodeWrap');
+    const closeBtn  = document.getElementById('postcodeClose');
+
+    const $postcode  = document.querySelector('input[name="ship_postcode"]');
+    const $addr1     = document.querySelector('input[name="ship_addr1"]');
+    const $addr2     = document.querySelector('input[name="ship_addr2"]');
+
+    function showLayer(){ if(layer&&dim){ layer.style.display='block'; dim.style.display='block'; } }
+    function hideLayer(){ if(layer&&dim){ layer.style.display='none';  dim.style.display='none'; } }
+
+    async function ensureDaumPostcode(){
+      if (window.daum?.Postcode) return;
+      await new Promise((resolve, reject) => {
+        const s = document.createElement('script');
+        s.src = 'https://t1.daumcdn.net/mapjsapi/bundle/postcode/prod/postcode.v2.js';
+        s.onload = resolve; s.onerror = reject;
+        document.head.appendChild(s);
+      });
+    }
+
+    function openPostcode(){
+      if (!wrap) return;
+      const pc = new daum.Postcode({
+        oncomplete: function(data){
+          const postcode = data.zonecode;
+          const addr = data.userSelectedType === 'R' ? data.roadAddress : data.jibunAddress;
+          if ($postcode) $postcode.value = postcode;
+          if ($addr1)    $addr1.value    = addr;
+          $addr2?.focus();
+          hideLayer();
+        },
+        onresize: function(size){ wrap.style.height = size.height + 'px'; },
+        width: '100%', height: '100%'
+      });
+      pc.embed(wrap, { autoClose: false });
+      showLayer();
+    }
+
+    findBtn?.addEventListener('click', async ()=> {
+      try { await ensureDaumPostcode(); openPostcode(); }
+      catch(e){ alert('주소검색 로딩에 실패했습니다. 잠시 후 다시 시도해 주세요.'); }
+    });
+    closeBtn?.addEventListener('click', hideLayer);
+    dim?.addEventListener('click', hideLayer);
+    window.addEventListener('keydown', (e)=>{ if(e.key === 'Escape') hideLayer(); });
 
     // 초기 렌더
     apply();
