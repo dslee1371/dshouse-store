@@ -2,10 +2,10 @@
 import mysql from 'mysql2/promise';
 
 const {
-  MYSQL_HOST = '127.0.0.1',
+  MYSQL_HOST = '10.146.0.2',
   MYSQL_PORT = '3306',
-  MYSQL_USER = 'root',
-  MYSQL_PASSWORD = '',
+  MYSQL_USER = 'app-1',
+  MYSQL_PASSWORD = 'temp1',
   MYSQL_DATABASE = 'kidswear',
 
   // ⬇️ 필요 시 외부 MySQL(Cloud, RDS 등)용 SSL 옵션
