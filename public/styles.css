@@ -115,3 +115,54 @@ input:focus,select:focus,textarea:focus{box-shadow:0 0 0 3px rgba(2,132,199,.15)
   .product-grid{grid-template-columns:1fr}
   .main-image img{height:420px}
 }
+
+/* 주소검색 버튼 UX 업그레이드 */
+.addr-search{
+  position:relative;
+  border-style:dashed; /* 평소엔 점선 */
+  transition:
+    transform .12s ease,
+    box-shadow .12s ease,
+    background-color .12s ease,
+    border-color .12s ease;
+}
+.addr-search .icon{
+  display:inline-block;
+  margin-right:6px;
+  transition: transform .12s ease;
+}
+
+/* 마우스 오버/키보드 포커스 시: 강조 */
+.addr-search:is(:hover, :focus-visible, .is-hover, .is-focus){
+  border-color: var(--brand, #5b7fff);
+  background: rgba(91,127,255,.08);
+  box-shadow: 0 6px 16px rgba(0,0,0,.08);
+  transform: translateY(-1px);
+}
+.addr-search:is(:hover, :focus-visible, .is-hover, .is-focus) .icon{
+  transform: scale(1.08);
+}
+
+/* 클릭/열림(active) 상태 */
+.addr-search:is(:active, .is-active){
+  transform: translateY(0) scale(.98);
+  box-shadow: 0 3px 10px rgba(0,0,0,.06);
+}
+
+/* 은은한 포커스 링 */
+.addr-search::after{
+  content:'';
+  position:absolute; inset:0;
+  border:2px solid transparent;
+  border-radius:12px;
+  transition: border-color .12s ease;
+  pointer-events:none;
+}
+.addr-search:is(:hover, :focus-visible, .is-hover, .is-focus)::after{
+  border-color: rgba(91,127,255,.35);
+}
+
+/* 모션 최소화 환경 배려 */
+@media (prefers-reduced-motion: reduce){
+  .addr-search, .addr-search .icon { transition:none; }
+}
