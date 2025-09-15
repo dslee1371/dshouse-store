@@ -346,6 +346,25 @@
       }
     });
 
+
+    // 이미 선언돼 있는 것 재사용: findBtn, dim, layer, wrap, closeBtn ...
+    function showLayer(){
+      if(layer&&dim){ layer.style.display='block'; dim.style.display='block'; }
+      if (findBtn){ findBtn.classList.add('is-active'); findBtn.setAttribute('aria-expanded','true'); }
+    }
+    function hideLayer(){
+      if(layer&&dim){ layer.style.display='none';  dim.style.display='none'; }
+      if (findBtn){ findBtn.classList.remove('is-active'); findBtn.setAttribute('aria-expanded','false'); }
+    }
+    
+    // 호버/포커스 보조(일부 터치/펜 환경 대응)
+    findBtn?.addEventListener('mouseenter', ()=> findBtn.classList.add('is-hover'));
+    findBtn?.addEventListener('mouseleave', ()=> findBtn.classList.remove('is-hover'));
+    findBtn?.addEventListener('focus',      ()=> findBtn.classList.add('is-focus'));
+    findBtn?.addEventListener('blur',       ()=> findBtn.classList.remove('is-focus'));
+
+
+
     // -----------------------------
     // 🏷️ 다음(카카오) 주소검색 연동
     // -----------------------------
