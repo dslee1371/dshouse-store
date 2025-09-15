@@ -2,7 +2,7 @@
 import mysql from 'mysql2/promise';
 
 const {
-  MYSQL_HOST = '34.84.243.137',
+  MYSQL_HOST = '10.146.0.2',
   MYSQL_PORT = '3306',
   MYSQL_USER = 'app-1',
   MYSQL_PASSWORD = 'temp1',
